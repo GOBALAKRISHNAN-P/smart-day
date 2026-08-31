@@ -1,4 +1,3 @@
-Available at your primary URL https://smart-day.onrender.com
 SmartDay – Personal Priority Planner
 
 SmartDay is a simple web application that helps users decide which task they should complete first.
