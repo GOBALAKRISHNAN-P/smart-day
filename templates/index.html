@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartDay – Personal Priority Planner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 1. App Header -->
+        <header class="app-header">
+            <div class="header-brand">
+                <div class="logo-icon">⚡</div>
+                <div>
+                    <h1>SmartDay</h1>
+                    <p class="subtitle">Personal Priority Planner</p>
+                </div>
+            </div>
+            <div class="header-date">
+                <span class="date-badge" id="currentDateDisplay">📅 Today</span>
+            </div>
+        </header>
+
+        <!-- 2. Colorful Summary Statistics -->
+        <section class="summary-section" aria-label="Task Summary">
+            <div class="summary-card card-stat-total">
+                <span class="summary-label">Total Tasks</span>
+                <span class="summary-value" id="statTotal">{{ total_tasks }}</span>
+            </div>
+            <div class="summary-card card-stat-pending">
+                <span class="summary-label">Pending</span>
+                <span class="summary-value" id="statPending">{{ total_pending }}</span>
+            </div>
+            <div class="summary-card card-stat-completed">
+                <span class="summary-label">Completed</span>
+                <span class="summary-value" id="statCompleted">{{ total_completed }}</span>
+            </div>
+            <div class="summary-card card-stat-priority">
+                <span class="summary-label">Top Priority</span>
+                <span class="summary-value" id="statTopScore">{{ highest_priority_score }}<small>/100</small></span>
+            </div>
+        </section>
+
+        <!-- 3. Next Best Task (Spotlight Recommendation) -->
+        <section class="next-task-section" aria-label="Next Best Task">
+            <div class="section-label-tag">🎯 NEXT BEST TASK</div>
+            <div class="next-task-card {% if next_best_task %}priority-{{ next_best_task.priority_category }}{% else %}empty-state{% endif %}" id="nextBestTaskCard">
+                {% if next_best_task %}
+                    <div class="next-task-header">
+                        <span class="recommendation-badge">⭐ HIGHEST PRIORITY</span>
+                        <div class="score-badge badge-{{ next_best_task.priority_category }}">
+                            Score: {{ next_best_task.priority_score }} • {{ next_best_task.priority_label }}
+                        </div>
+                    </div>
+                    <div class="next-task-body">
+                        <h2 class="next-task-title">{{ next_best_task.name }}</h2>
+                        <p class="next-task-explanation">💡 {{ next_best_task.explanation }}</p>
+                        <div class="task-meta-row">
+                            <span class="meta-tag meta-date">📅 {{ next_best_task.deadline }}</span>
+                            <span class="meta-tag meta-importance-{{ next_best_task.importance|lower }}">⭐ {{ next_best_task.importance }} Priority</span>
+                            <span class="meta-tag meta-hours">⏱️ {{ next_best_task.estimated_hours }}h effort</span>
+                        </div>
+                    </div>
+                    <div class="next-task-actions">
+                        <button class="btn btn-whatif" onclick="openWhatIfModal({{ next_best_task.id }})">
+                            ⏱️ What If I Delay?
+                        </button>
+                        <form action="/complete/{{ next_best_task.id }}" method="POST" style="display: inline;" onsubmit="handleFormAction(event, this)">
+                            <button type="submit" class="btn btn-complete">
+                                ✓ Complete Now
+                            </button>
+                        </form>
+                    </div>
+                {% else %}
+                    <div class="next-task-empty">
+                        <div class="empty-icon">🎉</div>
+                        <h3>All Caught Up!</h3>
+                        <p>No pending tasks. Add a task below to prioritize your day.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+
+        <!-- 4. Add Task Form (Full Width Stack) -->
+        <section class="section-block">
+            <div class="card card-colorful-form">
+                <div class="card-header flex-between">
+                    <div>
+                        <h2>➕ Add New Task</h2>
+                        <p>Calculate automated priority score</p>
+                    </div>
+                </div>
+                <form id="addTaskForm" action="/add" method="POST" onsubmit="handleAddTask(event)">
+                    <div class="form-group">
+                        <label for="taskName">Task Name</label>
+                        <input type="text" id="taskName" name="name" placeholder="e.g., Submit quarterly report" required autocomplete="off">
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="taskDeadline">Deadline</label>
+                            <input type="date" id="taskDeadline" name="deadline" required min="{{ today_date }}">
+                        </div>
+
+                        <div class="form-group half-width">
+                            <label for="taskImportance">Importance</label>
+                            <select id="taskImportance" name="importance" required>
+                                <option value="High">🔴 High</option>
+                                <option value="Medium" selected>🟡 Medium</option>
+                                <option value="Low">🟢 Low</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group half-width">
+                            <label for="taskHours">Estimated Hours</label>
+                            <input type="number" id="taskHours" name="estimated_hours" step="0.5" min="0.5" max="100" value="1.0" required>
+                        </div>
+                        <div class="form-group half-width flex-end">
+                            <button type="submit" class="btn btn-primary btn-block">
+                                🚀 Calculate & Add Task
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- 5. Priority Task Queue (Full Width Cards) -->
+        <section class="section-block">
+            <div class="card card-queue">
+                <div class="card-header flex-between">
+                    <div>
+                        <h2>📋 Priority Task Queue</h2>
+                        <p>Sorted deterministically by priority score (0–100)</p>
+                    </div>
+                    <span class="count-badge" id="pendingCountBadge">{{ pending_tasks|length }} Pending</span>
+                </div>
+
+                <div class="task-list" id="pendingTaskList">
+                    {% if pending_tasks %}
+                        {% for task in pending_tasks %}
+                            <div class="task-item priority-border-{{ task.priority_category }}" id="task-card-{{ task.id }}">
+                                <div class="task-item-main">
+                                    <div class="task-header-row">
+                                        <h3 class="task-name">{{ task.name }}</h3>
+                                        <span class="score-pill badge-{{ task.priority_category }}">
+                                            {{ task.priority_score }} • {{ task.priority_label }}
+                                        </span>
+                                    </div>
+                                    <div class="task-meta">
+                                        <span class="meta-pill meta-date">📅 {{ task.deadline }}</span>
+                                        <span class="meta-pill meta-importance-{{ task.importance|lower }}">⭐ {{ task.importance }}</span>
+                                        <span class="meta-pill meta-hours">⏱️ {{ task.estimated_hours }}h</span>
+                                    </div>
+                                    <div class="task-explanation-sub">
+                                        {{ task.explanation }}
+                                    </div>
+                                </div>
+                                <div class="task-actions">
+                                    <button class="btn-icon btn-whatif-sm" title="Simulate 1-Day Delay" onclick="openWhatIfModal({{ task.id }})">
+                                        ⏱️ What If?
+                                    </button>
+                                    <form action="/complete/{{ task.id }}" method="POST" style="display:inline;" onsubmit="handleFormAction(event, this)">
+                                        <button type="submit" class="btn-icon btn-check" title="Mark as Completed">
+                                            ✓ Done
+                                        </button>
+                                    </form>
+                                    <form action="/delete/{{ task.id }}" method="POST" style="display:inline;" onsubmit="handleDeleteAction(event, this)">
+                                        <button type="submit" class="btn-icon btn-trash" title="Delete Task">
+                                            🗑
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-list-placeholder">
+                            <p>🎉 No pending tasks. Add one using the form above!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <!-- 6. Completed Tasks Section -->
+        {% if completed_tasks %}
+        <section class="section-block">
+            <div class="card completed-card">
+                <div class="card-header flex-between">
+                    <div>
+                        <h2>✅ Completed Tasks</h2>
+                        <p>Accomplished priorities</p>
+                    </div>
+                    <span class="count-badge count-badge-muted">{{ completed_tasks|length }} Completed</span>
+                </div>
+                <div class="task-list completed-list">
+                    {% for task in completed_tasks %}
+                        <div class="task-item task-completed-item" id="task-card-{{ task.id }}">
+                            <div class="task-item-main">
+                                <div class="task-header-row">
+                                    <h3 class="task-name task-done-title">{{ task.name }}</h3>
+                                    <span class="score-pill badge-completed">✓ Done</span>
+                                </div>
+                                <div class="task-meta">
+                                    <span class="meta-pill meta-date">📅 {{ task.deadline }}</span>
+                                    <span class="meta-pill meta-importance-{{ task.importance|lower }}">⭐ {{ task.importance }}</span>
+                                    <span class="meta-pill meta-hours">⏱️ {{ task.estimated_hours }}h</span>
+                                </div>
+                            </div>
+                            <div class="task-actions">
+                                <form action="/complete/{{ task.id }}" method="POST" style="display:inline;" onsubmit="handleFormAction(event, this)">
+                                    <button type="submit" class="btn-icon btn-undo" title="Move back to Pending">
+                                        ↩ Undo
+                                    </button>
+                                </form>
+                                <form action="/delete/{{ task.id }}" method="POST" style="display:inline;" onsubmit="handleDeleteAction(event, this)">
+                                    <button type="submit" class="btn-icon btn-trash" title="Delete Task">
+                                        🗑
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>SmartDay Priority Planner • Deterministic Urgency & Importance Matrix</p>
+        </footer>
+    </div>
+
+    <!-- What-If Delay Modal Dialog -->
+    <div class="modal-backdrop" id="whatIfModal" style="display: none;" onclick="closeWhatIfModalOnBackdrop(event)">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="modal-badge">🔮 SIMULATION</span>
+                    <h3 id="modalTaskName">Task Name</h3>
+                </div>
+                <button class="btn-close" onclick="closeWhatIfModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-subtitle">What happens if you postpone action on this task by <strong>1 day</strong>?</p>
+                
+                <div class="simulation-comparison">
+                    <div class="sim-box sim-current">
+                        <span class="sim-label">CURRENT SCORE</span>
+                        <div class="sim-score" id="modalCurrentScore">--</div>
+                        <span class="sim-level" id="modalCurrentLevel">--</span>
+                    </div>
+                    
+                    <div class="sim-arrow">
+                        <span class="arrow-symbol">➔</span>
+                        <span class="diff-badge" id="modalScoreDiff">+0</span>
+                    </div>
+
+                    <div class="sim-box sim-projected">
+                        <span class="sim-label">AFTER 1-DAY DELAY</span>
+                        <div class="sim-score" id="modalSimulatedScore">--</div>
+                        <span class="sim-level" id="modalSimulatedLevel">--</span>
+                    </div>
+                </div>
+
+                <div class="sim-explanation" id="modalExplanationBox">
+                    <p id="modalExplanationText">Calculating simulated outcome...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeWhatIfModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
